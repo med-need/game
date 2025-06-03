@@ -4,37 +4,61 @@ class Animal {
     this.y = y;
     this.vx = Math.random() * 2 - 1;
     this.vy = Math.random() * 2 - 1;
+    this.baseSpeed = 0.5 + Math.random() * 1.5;
     this.energy = 50;
+    this.size = 5;
     this.color = `hsl(${Math.random() * 360},70%,60%)`;
+    this.behavior = Math.random() < 0.5 ? 'nearest' : 'furthest';
+    this.smart = Math.random() < 0.3;
   }
 
   update() {
     let target = null;
-    let best = Infinity;
+    let best = this.behavior === 'nearest' ? Infinity : -Infinity;
     for (const f of foods) {
       const dx = f.x - this.x;
       const dy = f.y - this.y;
       const d = dx * dx + dy * dy;
-      if (d < best) {
-        best = d;
-        target = f;
+      if (this.behavior === 'nearest') {
+        if (d < best) {
+          best = d;
+          target = f;
+        }
+      } else {
+        if (d > best) {
+          best = d;
+          target = f;
+        }
       }
     }
+
+    if (target && this.smart) {
+      for (const a of animals) {
+        if (a === this) continue;
+        const ad = (a.x - target.x) ** 2 + (a.y - target.y) ** 2;
+        if (ad < best) {
+          target = null;
+          break;
+        }
+      }
+    }
+
     if (target) {
       const dx = target.x - this.x;
       const dy = target.y - this.y;
       const dist = Math.hypot(dx, dy) || 1;
-      this.vx += (dx / dist) * 0.2;
-      this.vy += (dy / dist) * 0.2;
+      this.vx += (dx / dist) * 0.1;
+      this.vy += (dy / dist) * 0.1;
     } else {
       this.vx += Math.random() * 0.2 - 0.1;
       this.vy += Math.random() * 0.2 - 0.1;
     }
 
+    const max = this.baseSpeed * (5 / this.size);
     const speed = Math.hypot(this.vx, this.vy);
-    if (speed > 2) {
-      this.vx *= 2 / speed;
-      this.vy *= 2 / speed;
+    if (speed > max) {
+      this.vx *= max / speed;
+      this.vy *= max / speed;
     }
 
     this.x += this.vx;
@@ -49,24 +73,28 @@ class Animal {
       const f = foods[i];
       const dx = this.x - f.x;
       const dy = this.y - f.y;
-      if (dx * dx + dy * dy < 64) {
+      if (dx * dx + dy * dy < (this.size * 2) ** 2) {
         foods.splice(i, 1);
         this.energy += 20;
+        this.size = Math.min(this.size + 0.5, 10);
         break;
       }
     }
 
     this.energy -= 0.05;
-    if (this.energy > 80) {
+    if (this.energy > 100) {
       this.energy /= 2;
-      animals.push(new Animal(this.x + Math.random() * 10 - 5, this.y + Math.random() * 10 - 5));
+      animals.push(new Animal(
+        this.x + Math.random() * 20 - 10,
+        this.y + Math.random() * 20 - 10
+      ));
     }
   }
 
   draw() {
     ctx.fillStyle = this.color;
     ctx.beginPath();
-    ctx.arc(this.x, this.y, 5, 0, Math.PI * 2);
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -107,6 +135,28 @@ canvas.addEventListener('click', (e) => {
   addFood(x, y);
 });
 
+function resolveCollisions() {
+  for (let i = 0; i < animals.length; i++) {
+    const a = animals[i];
+    for (let j = i + 1; j < animals.length; j++) {
+      const b = animals[j];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const min = a.size + b.size;
+      if (dist < min) {
+        const overlap = (min - dist) / 2;
+        const ox = (dx / dist) * overlap;
+        const oy = (dy / dist) * overlap;
+        a.x -= ox;
+        a.y -= oy;
+        b.x += ox;
+        b.y += oy;
+      }
+    }
+  }
+}
+
 function update() {
   for (let i = animals.length - 1; i >= 0; i--) {
     const a = animals[i];
@@ -115,6 +165,7 @@ function update() {
       animals.splice(i, 1);
     }
   }
+  resolveCollisions();
 }
 
 function draw() {
