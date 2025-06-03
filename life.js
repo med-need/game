@@ -81,8 +81,9 @@ class Animal {
       }
     }
 
-    this.energy -= 0.05;
-    if (this.energy > 100) {
+    this.energy -= 0.005;
+    if (this.energy < 0) this.energy = 0;
+    if (this.energy > 80) {
       this.energy /= 2;
       animals.push(new Animal(
         this.x + Math.random() * 20 - 10,
@@ -96,6 +97,25 @@ class Animal {
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
     ctx.fill();
+
+    const eyeOffset = this.size * 0.4;
+    const eyeSize = this.size * 0.2;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(this.x - eyeOffset, this.y - eyeOffset, eyeSize, 0, Math.PI * 2);
+    ctx.arc(this.x + eyeOffset, this.y - eyeOffset, eyeSize, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(this.x - eyeOffset, this.y - eyeOffset, eyeSize / 2, 0, Math.PI * 2);
+    ctx.arc(this.x + eyeOffset, this.y - eyeOffset, eyeSize / 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y + this.size * 0.2, this.size * 0.5, 0, Math.PI);
+    ctx.stroke();
   }
 }
 
@@ -145,13 +165,25 @@ function resolveCollisions() {
       const dist = Math.hypot(dx, dy) || 1;
       const min = a.size + b.size;
       if (dist < min) {
-        const overlap = (min - dist) / 2;
-        const ox = (dx / dist) * overlap;
-        const oy = (dy / dist) * overlap;
-        a.x -= ox;
-        a.y -= oy;
-        b.x += ox;
-        b.y += oy;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const overlap = min - dist;
+        const total = a.size + b.size;
+        a.x -= nx * overlap * (b.size / total);
+        a.y -= ny * overlap * (b.size / total);
+        b.x += nx * overlap * (a.size / total);
+        b.y += ny * overlap * (a.size / total);
+
+        const rvx = a.vx - b.vx;
+        const rvy = a.vy - b.vy;
+        const relVel = rvx * nx + rvy * ny;
+        if (relVel < 0) {
+          const impulse = (2 * relVel) / total;
+          a.vx -= impulse * b.size * nx;
+          a.vy -= impulse * b.size * ny;
+          b.vx += impulse * a.size * nx;
+          b.vy += impulse * a.size * ny;
+        }
       }
     }
   }
@@ -161,9 +193,6 @@ function update() {
   for (let i = animals.length - 1; i >= 0; i--) {
     const a = animals[i];
     a.update();
-    if (a.energy <= 0) {
-      animals.splice(i, 1);
-    }
   }
   resolveCollisions();
 }
