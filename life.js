@@ -452,9 +452,6 @@ class Savior {
         this.strength = Math.min(this.strength + 5, 220);
       }
     }
-        }
-      }
-    }
 
     this.size = Math.min(14 * Math.sqrt(this.strength / 110), 25);
   }
