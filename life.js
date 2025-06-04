@@ -18,6 +18,22 @@ class Animal {
 
   update() {
     this.happy = Math.max(0, this.happy - 1);
+    let runFrom = null;
+    let runDist = 200 * 200;
+    for (const m of monsters) {
+      const d = (m.x - this.x) ** 2 + (m.y - this.y) ** 2;
+      if (d < runDist) {
+        runDist = d;
+        runFrom = m;
+      }
+    }
+    if (runFrom) {
+      const dx = this.x - runFrom.x;
+      const dy = this.y - runFrom.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      this.vx += (dx / dist) * 0.3;
+      this.vy += (dy / dist) * 0.3;
+    }
     let target = null;
     let best = this.behavior === 'nearest' ? Infinity : -Infinity;
     if (!this.evil) {
@@ -276,7 +292,7 @@ class Monster {
           break;
         }
         if (s.strength <= 0) {
-          if (s.home) s.home.occupied = false;
+          if (s.home && s.home.occupant === s) s.home.occupant = null;
           saviors.splice(i, 1);
           bloods.push({ x: s.x, y: s.y, life: 60 });
           this.strength = Math.min(this.strength + 20, 200);
@@ -347,8 +363,10 @@ class Savior {
     }
 
     if (enemy) {
-      if (this.home) this.home.occupied = false;
-      this.home = null;
+      if (this.home) {
+        if (this.home.occupant === this) this.home.occupant = null;
+        this.home = null;
+      }
       const dx = enemy.x - this.x;
       const dy = enemy.y - this.y;
       const dist = Math.hypot(dx, dy) || 1;
@@ -358,6 +376,7 @@ class Savior {
       if (!this.home && homes.length) {
         let bestH = Infinity;
         for (const h of homes) {
+          if (h.occupant && h.occupant !== this) continue;
           const d = (h.x - this.x) ** 2 + (h.y - this.y) ** 2;
           if (d < bestH) { bestH = d; this.home = h; }
         }
@@ -370,7 +389,7 @@ class Savior {
           this.vx += (dx / dist) * 0.2;
           this.vy += (dy / dist) * 0.2;
         } else {
-          this.home.occupied = true;
+          if (!this.home.occupant) this.home.occupant = this;
           this.vx *= 0.8;
           this.vy *= 0.8;
           if (Math.random() < 0.02) {
@@ -410,7 +429,7 @@ class Savior {
           this.strength = Math.min(this.strength + 10, 220);
         }
         if (this.strength <= 0) {
-          if (this.home) this.home.occupied = false;
+          if (this.home && this.home.occupant === this) this.home.occupant = null;
           saviors.splice(saviors.indexOf(this), 1);
           bloods.push({ x: this.x, y: this.y, life: 60 });
           return;
@@ -434,7 +453,7 @@ class Savior {
           this.strength = Math.min(this.strength + 10, 220);
         }
         if (this.strength <= 0) {
-          if (this.home) this.home.occupied = false;
+          if (this.home && this.home.occupant === this) this.home.occupant = null;
           saviors.splice(saviors.indexOf(this), 1);
           bloods.push({ x: this.x, y: this.y, life: 60 });
           return;
@@ -472,27 +491,42 @@ class Savior {
 }
 
 class Home {
-  constructor(x, y) {
+  constructor(x, y, count) {
     this.x = x;
     this.y = y;
+    this.size = 10 + Math.min(count, 80) / 2;
     this.spawn = 30;
-    this.occupied = false;
-    this.foodTimer = 300;
+    this.occupant = null;
+    this.foodTimer = 120;
     this.animalTimer = 600;
+    this.residents = [];
   }
 
   update() {
     if (this.spawn > 0) this.spawn--;
-    if (!this.occupied) return;
     this.foodTimer--;
-    this.animalTimer--;
     if (this.foodTimer <= 0) {
-      addFood(this.x + Math.random() * 20 - 10, this.y + Math.random() * 20 - 10);
-      this.foodTimer = 300;
+      addFood(this.x + Math.random() * this.size - this.size / 2,
+              this.y + Math.random() * this.size - this.size / 2);
+      this.foodTimer = 120;
     }
-    if (this.animalTimer <= 0) {
-      addAnimal(this.x + Math.random() * 20 - 10, this.y + Math.random() * 20 - 10);
-      this.animalTimer = 600;
+    if (this.occupant) {
+      this.animalTimer--;
+      if (this.animalTimer <= 0) {
+        addAnimal(this.x + Math.random() * 20 - 10,
+                  this.y + Math.random() * 20 - 10);
+        this.animalTimer = 600;
+      }
+    }
+    for (let i = this.residents.length - 1; i >= 0; i--) {
+      const r = this.residents[i];
+      r.time--;
+      if (r.time <= 0) {
+        r.animal.x = this.x + Math.random() * this.size - this.size / 2;
+        r.animal.y = this.y + Math.random() * this.size - this.size / 2;
+        animals.push(r.animal);
+        this.residents.splice(i, 1);
+      }
     }
   }
 
@@ -502,7 +536,14 @@ class Home {
     ctx.translate(this.x, this.y);
     ctx.scale(scale, scale);
     ctx.fillStyle = '#663300';
-    ctx.fillRect(-10, -10, 20, 20);
+    ctx.fillRect(-this.size, -this.size, this.size * 2, this.size * 2);
+    ctx.fillStyle = '#000';
+    const windows = Math.ceil(this.residents.length / 10);
+    for (let i = 0; i < windows; i++) {
+      ctx.fillRect(-this.size + 4 + (i % 3) * (this.size * 0.6),
+                   -this.size + 4 + Math.floor(i / 3) * (this.size * 0.6),
+                   this.size * 0.3, this.size * 0.3);
+    }
     ctx.restore();
   }
 }
@@ -593,6 +634,21 @@ function resolveCollisions() {
   }
 }
 
+function handleHomeEntry() {
+  for (let i = animals.length - 1; i >= 0; i--) {
+    const a = animals[i];
+    if (a.evil) continue;
+    for (const h of homes) {
+      const dist = Math.hypot(a.x - h.x, a.y - h.y);
+      if (dist < h.size && Math.random() < 0.005) {
+        h.residents.push({ animal: a, time: 3600 });
+        animals.splice(i, 1);
+        break;
+      }
+    }
+  }
+}
+
 function checkHomes() {
   for (let i = 0; i < animals.length; i++) {
     const a = animals[i];
@@ -611,7 +667,7 @@ function checkHomes() {
         const idx = animals.indexOf(g);
         if (idx >= 0) animals.splice(idx, 1);
       }
-      homes.push(new Home(cx, cy));
+      homes.push(new Home(cx, cy, group.length));
       break;
     }
   }
@@ -625,6 +681,7 @@ function update() {
   for (const s of saviors) s.update();
   for (const h of homes) h.update();
   resolveCollisions();
+  handleHomeEntry();
 
   for (let i = bloods.length - 1; i >= 0; i--) {
     bloods[i].life--;
@@ -644,6 +701,20 @@ function draw() {
   }
 
   for (const a of animals) a.draw();
+  ctx.strokeStyle = '#555';
+  for (let i = 0; i < homes.length; i++) {
+    const a = homes[i];
+    for (let j = i + 1; j < homes.length; j++) {
+      const b = homes[j];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d > 100 && d < 200) {
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+    }
+  }
   for (const h of homes) h.draw();
   for (const m of monsters) m.draw();
   for (const s of saviors) s.draw();
